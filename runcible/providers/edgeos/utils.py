@@ -209,3 +209,133 @@ def parse_bgp_commands(commands):
     if neighbors:
         state[BGPResources.NEIGHBORS] = list(neighbors.values())
     return state
+
+
+# ---------------------------------------------------------------------------
+# Static IPv4 route helpers
+# ---------------------------------------------------------------------------
+#
+# EdgeOS/Vyatta stores static routes under ``protocols static route`` and
+# exposes them in ``show configuration commands`` as, for example::
+#
+#     set protocols static route 10.1.0.0/16 next-hop 10.1.2.3
+#     set protocols static route 10.1.0.0/16 next-hop 10.1.2.3 distance 1
+#     set protocols static route 10.1.0.0/16 description 'uplink'
+#
+# The vendor-neutral schema lives in ``runcible.modules.static_v4_route``
+# (StaticV4RouteResources: prefix / gateway_ip / distance / description). Each
+# route carries a single next-hop (``gateway_ip``); ``distance`` hangs off that
+# next-hop in the EdgeOS tree, so command builders that touch distance need the
+# gateway to address the right next-hop node.
+from runcible.modules.static_v4_route import StaticV4RouteResources
+
+
+def _quote(value):
+    """Quote a value for the EdgeOS CLI when it contains whitespace."""
+    text = str(value)
+    if any(ch.isspace() for ch in text):
+        return f"'{text}'"
+    return text
+
+
+def _unquote(value):
+    """Strip a single pair of surrounding quotes, mirroring ``_quote``."""
+    if len(value) >= 2 and value[0] in "'\"" and value[-1] == value[0]:
+        return value[1:-1]
+    return value
+
+
+def static_route_create_commands(prefix):
+    """Declare a static route node (no attributes yet)."""
+    return [f"set protocols static route {prefix}"]
+
+
+def static_route_remove_commands(prefix):
+    """Remove a static route and everything under it."""
+    return [f"delete protocols static route {prefix}"]
+
+
+def next_hop_set_commands(prefix, gateway, distance=None):
+    """Set the next-hop (and optionally its distance) for a route."""
+    commands = [f"set protocols static route {prefix} next-hop {gateway}"]
+    if distance is not None:
+        commands.append(
+            f"set protocols static route {prefix} next-hop {gateway} "
+            f"distance {distance}")
+    return commands
+
+
+def next_hop_delete_commands(prefix, gateway=None):
+    """Delete a route's next-hop.
+
+    With ``gateway`` given, the specific next-hop is removed; without it the
+    whole ``next-hop`` subtree is removed (used when the module clears the
+    gateway with no value).
+    """
+    if gateway is None:
+        return [f"delete protocols static route {prefix} next-hop"]
+    return [f"delete protocols static route {prefix} next-hop {gateway}"]
+
+
+def distance_set_commands(prefix, gateway, distance):
+    """Set the administrative distance on a route's next-hop.
+
+    ``gateway`` is required to address the EdgeOS ``next-hop <ip> distance``
+    node; when it is unknown (e.g. an ad-hoc distance change with no gateway in
+    the desired state) the distance is set directly under the route, which is
+    still an idempotent, well-formed statement the box accepts.
+    """
+    if gateway is None:
+        return [f"set protocols static route {prefix} distance {distance}"]
+    return [
+        f"set protocols static route {prefix} next-hop {gateway} "
+        f"distance {distance}"
+    ]
+
+
+def description_set_commands(prefix, description):
+    return [
+        f"set protocols static route {prefix} description "
+        f"{_quote(description)}"
+    ]
+
+
+def description_delete_commands(prefix):
+    return [f"delete protocols static route {prefix} description"]
+
+
+def parse_static_route_commands(commands):
+    """Parse EdgeOS ``set protocols static route ...`` lines into route dicts.
+
+    Returns a ``{prefix: {gateway_ip, distance, description}}`` mapping built
+    from the stored configuration commands. Only IPv4 ``protocols static
+    route`` lines are considered; ``protocols static route6`` (IPv6) and other
+    protocol trees are ignored.
+    """
+    routes = {}
+    for line in commands or []:
+        tokens = line.split()
+        # set protocols static route <prefix> ...
+        if len(tokens) < 5:
+            continue
+        if tokens[0] != 'set':
+            continue
+        if tokens[1] != 'protocols' or tokens[2] != 'static' \
+                or tokens[3] != 'route':
+            continue
+        prefix = tokens[4]
+        route = routes.setdefault(prefix, {StaticV4RouteResources.PREFIX: prefix})
+        attrs = tokens[5:]
+        if not attrs:
+            continue
+        if attrs[0] == 'next-hop' and len(attrs) >= 2:
+            route[StaticV4RouteResources.GATEWAY_IP] = attrs[1]
+            # 'next-hop <ip> distance <n>'
+            if len(attrs) >= 4 and attrs[2] == 'distance':
+                route[StaticV4RouteResources.DISTANCE] = int(attrs[3])
+        elif attrs[0] == 'distance' and len(attrs) >= 2:
+            route[StaticV4RouteResources.DISTANCE] = int(attrs[1])
+        elif attrs[0] == 'description' and len(attrs) >= 2:
+            route[StaticV4RouteResources.DESCRIPTION] = _unquote(
+                ' '.join(attrs[1:]))
+    return routes
