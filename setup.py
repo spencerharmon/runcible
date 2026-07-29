@@ -10,12 +10,14 @@ setuptools.setup(
     packages=setuptools.find_packages(),
     license='GPL V3',
     install_requires=[
-        'paramiko>=2.4.2',
-        'colorama>=0.4.1',
-        'cryptography>=2.5.0',
-        'pyyaml>=5.1',
-        'mergedb>=0.1.0',
-        'pyserial>=3.4'
+        'paramiko>=3.4,<4',
+        'paramiko-expect>=0.3.5',
+        'colorama>=0.4.6',
+        'cryptography>=42.0',
+        'pyyaml>=6.0',
+        'mergedb>=0.1.1',
+        'pyserial>=3.5',
+        'VyattaConfParser>=0.5.1'
     ],
     long_description=open('README.md').read(),
     long_description_content_type='text/x-rst',
