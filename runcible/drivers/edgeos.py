@@ -11,6 +11,7 @@ This module is the driver skeleton. The per-module providers
 """
 from runcible.protocols.ssh_protocol import SSHProtocol
 from runcible.drivers.driver import DriverBase
+from runcible.providers.edgeos.interfaces import EdgeOSInterfacesProvider
 
 
 class EdgeOSDriver(DriverBase):
@@ -19,7 +20,9 @@ class EdgeOSDriver(DriverBase):
     # Filled in by the per-module provider tasks
     # (edgeos-system-provider, edgeos-interfaces-provider,
     #  edgeos-static-route-provider, edgeos-bgp-provider).
-    module_provider_map = {}
+    module_provider_map = {
+        "interfaces": EdgeOSInterfacesProvider,
+    }
 
     protocol_map = {
         "ssh": SSHProtocol

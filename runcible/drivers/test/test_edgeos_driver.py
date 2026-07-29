@@ -20,8 +20,13 @@ class TestEdgeOSDriver(unittest.TestCase):
         self.assertIn("ssh", EdgeOSDriver.protocol_map)
         self.assertIs(EdgeOSDriver.protocol_map["ssh"], SSHProtocol)
 
-    def test_module_provider_map_starts_empty(self):
-        self.assertEqual(EdgeOSDriver.module_provider_map, {})
+    def test_module_provider_map_binds_interfaces(self):
+        from runcible.providers.edgeos.interfaces import EdgeOSInterfacesProvider
+        self.assertIn("interfaces", EdgeOSDriver.module_provider_map)
+        self.assertIs(
+            EdgeOSDriver.module_provider_map["interfaces"],
+            EdgeOSInterfacesProvider,
+        )
 
     def test_driver_registers_and_loads(self):
         PluginRegistry.drivers = {}
