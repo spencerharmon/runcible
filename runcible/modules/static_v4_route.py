@@ -25,7 +25,13 @@ class StaticV4Route(Module):
             'type': str,
             'allowed_operations': [Op.SET, Op.DELETE],
             'examples': ['10.1.2.3', '192.168.1.1'],
-            'required': True
+            # NOTE: not 'required'. StaticV4Route is an array sub_module
+            # (parent_module='static_v4_routes'); ModuleArray.determine_needs
+            # builds an empty ``StaticV4Route({})`` to diff a brand-new route
+            # against, so the sub_module MUST be constructible from ``{}``. A
+            # required attribute makes that empty-instance construction raise a
+            # ValidationError and breaks adding any new route. The gateway is
+            # still emitted whenever the desired state carries it.
         },
         StaticV4RouteResources.DISTANCE: {
             'type': int,

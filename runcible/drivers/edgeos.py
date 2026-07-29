@@ -13,6 +13,7 @@ from runcible.protocols.ssh_protocol import SSHProtocol
 from runcible.drivers.driver import DriverBase
 from runcible.providers.edgeos.system import EdgeOSSystemProvider
 from runcible.providers.edgeos.interfaces import EdgeOSInterfacesProvider
+from runcible.providers.edgeos.static_v4_routes import EdgeOSStaticV4RoutesProvider
 from runcible.providers.edgeos.bgp import EdgeOSBGPProvider
 
 
@@ -25,6 +26,7 @@ class EdgeOSDriver(DriverBase):
     module_provider_map = {
         "system": EdgeOSSystemProvider,
         "interfaces": EdgeOSInterfacesProvider,
+        "static_v4_routes": EdgeOSStaticV4RoutesProvider,
         "bgp": EdgeOSBGPProvider,
     }
 
