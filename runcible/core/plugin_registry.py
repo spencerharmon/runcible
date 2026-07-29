@@ -5,7 +5,7 @@ from runcible.modules.module import Module
 from runcible.drivers.driver import DriverBase
 from runcible.labels.label import LabelBase
 # from runcible.schedulers.scheduler import SchedulerBase
-import pkg_resources
+from importlib.metadata import entry_points
 
 class PluginRegistry:
     modules = {}
@@ -35,10 +35,19 @@ class PluginRegistry:
 
     @classmethod
     def load_plugin_drivers(cls):
+        all_entry_points = entry_points()
+        try:
+            # Python 3.10+ / importlib_metadata >= 3.6 selectable API
+            driver_entry_points = all_entry_points.select(
+                group='runcible.drivers'
+            )
+        except AttributeError:
+            # Python 3.9 returns a plain dict keyed by group
+            driver_entry_points = all_entry_points.get('runcible.drivers', [])
         plugins = {
             entry_point.name: entry_point.load()
             for entry_point
-            in pkg_resources.iter_entry_points('runcible.drivers')
+            in driver_entry_points
         }
         for name, driver_class in plugins.items():
             cls.add_driver_to_registry(driver_class)

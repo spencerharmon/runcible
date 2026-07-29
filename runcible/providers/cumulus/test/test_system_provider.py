@@ -1,5 +1,5 @@
 import unittest
-import mock
+from unittest import mock
 from unittest.mock import MagicMock, Mock
 from runcible.providers.cumulus.system import CumulusSystemProvider
 from runcible.modules.system import System
