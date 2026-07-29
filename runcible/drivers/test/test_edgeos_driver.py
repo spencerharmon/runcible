@@ -25,9 +25,18 @@ class TestEdgeOSDriver(unittest.TestCase):
         # Filled in incrementally by the per-module provider tasks
         # (edgeos-system-provider, edgeos-interfaces-provider,
         #  edgeos-static-route-provider, edgeos-bgp-provider).
-        self.assertEqual(
-            EdgeOSDriver.module_provider_map,
-            {"system": EdgeOSSystemProvider}
+        self.assertIn("system", EdgeOSDriver.module_provider_map)
+        self.assertIs(
+            EdgeOSDriver.module_provider_map["system"],
+            EdgeOSSystemProvider,
+        )
+
+    def test_module_provider_map_binds_interfaces(self):
+        from runcible.providers.edgeos.interfaces import EdgeOSInterfacesProvider
+        self.assertIn("interfaces", EdgeOSDriver.module_provider_map)
+        self.assertIs(
+            EdgeOSDriver.module_provider_map["interfaces"],
+            EdgeOSInterfacesProvider,
         )
 
     def test_driver_registers_and_loads(self):
