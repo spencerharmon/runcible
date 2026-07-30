@@ -17,15 +17,17 @@ This module is the driver skeleton. The per-module providers are wired into
 from runcible.protocols.rest_protocol import RestProtocol
 from runcible.drivers.driver import DriverBase
 from runcible.providers.omada.system import OmadaSystemProvider
+from runcible.providers.omada.wlan import OmadaWLANProvider
 
 
 class OmadaDriver(DriverBase):
     driver_name = "omada"
 
-    # Filled in by the per-module Omada provider tasks.
-    # (omada-system-provider, omada-wlan-provider, ...).
+    # Per-module Omada provider wiring, keyed by module name (as it appears in
+    # the device's dstate). Providers live under ``runcible/providers/omada/``.
     module_provider_map = {
         "system": OmadaSystemProvider,
+        "wlan": OmadaWLANProvider,
     }
 
     protocol_map = {

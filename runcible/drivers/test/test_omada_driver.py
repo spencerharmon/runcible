@@ -25,6 +25,12 @@ class TestOmadaDriver(unittest.TestCase):
         # Filled in incrementally by the per-module Omada provider tasks.
         self.assertIs(OmadaDriver.module_provider_map.get("system"), OmadaSystemProvider)
 
+    def test_module_provider_map_wires_wlan(self):
+        # Filled in incrementally by the per-module Omada provider tasks; the
+        # wlan module is wired to the Omada WLAN/SSID provider.
+        from runcible.providers.omada.wlan import OmadaWLANProvider
+        self.assertIs(OmadaDriver.module_provider_map.get("wlan"), OmadaWLANProvider)
+
     def test_driver_registers_and_loads(self):
         PluginRegistry.drivers = {}
         driver = PluginRegistry.get_driver("omada")
