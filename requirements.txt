@@ -11,6 +11,8 @@ mergedb>=0.1.1
 VyattaConfParser>=0.5.1
 # HTTP client for the Omada controller Northbound REST protocol.
 requests>=2.31
+# Web framework backing the optional runcible-webui service (ROI P4).
+Flask>=3.0
 
 # Test dependencies
 coverage>=7.4

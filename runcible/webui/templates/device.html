@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Runcible Web UI - {{ name }}</title>
+</head>
+<body>
+  <p><a href="{{ url_for('index') }}">&laquo; devices</a></p>
+  <h1>{{ name }}</h1>
+
+  {% if plan.needs_changes %}
+  <h2>Pending changes</h2>
+  <ul>
+    {% for need in plan.needs %}
+    <li>{{ need.module }}: {{ need.description }}</li>
+    {% endfor %}
+  </ul>
+  <form method="post" action="{{ url_for('device_run', name=name) }}">
+    <button type="submit">Apply changes</button>
+  </form>
+  {% else %}
+  <p>No changes needed.</p>
+  {% endif %}
+
+  <h2>Current state</h2>
+  <pre>{{ plan.cstate }}</pre>
+</body>
+</html>
