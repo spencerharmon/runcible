@@ -17,7 +17,8 @@ setuptools.setup(
         'pyyaml>=6.0',
         'mergedb>=0.1.1',
         'pyserial>=3.5',
-        'VyattaConfParser>=0.5.1'
+        'VyattaConfParser>=0.5.1',
+        'requests>=2.31'
     ],
     long_description=open('README.md').read(),
     long_description_content_type='text/x-rst',
