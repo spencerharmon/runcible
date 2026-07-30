@@ -9,6 +9,8 @@ pyserial>=3.5
 mergedb>=0.1.1
 # EdgeOS/Vyatta config parsing used by the EdgeOS driver.
 VyattaConfParser>=0.5.1
+# HTTP client for the Omada controller Northbound REST protocol.
+requests>=2.31
 
 # Test dependencies
 coverage>=7.4
