@@ -18,7 +18,8 @@ setuptools.setup(
         'mergedb>=0.1.1',
         'pyserial>=3.5',
         'VyattaConfParser>=0.5.1',
-        'requests>=2.31'
+        'requests>=2.31',
+        'Flask>=3.0'
     ],
     long_description=open('README.md').read(),
     long_description_content_type='text/x-rst',
@@ -41,7 +42,12 @@ setuptools.setup(
     python_requires='>=3.9, <4',
     entry_points={
         'console_scripts': [
-            'runcible = runcible.__main__:main'
+            'runcible = runcible.__main__:main',
+            'runcible-webui = runcible.webui.cli:main'
         ]
+    },
+    include_package_data=True,
+    package_data={
+        'runcible.webui': ['templates/*.html']
     }
 )

@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Runcible Web UI</title>
+</head>
+<body>
+  <h1>Managed devices</h1>
+  {% if devices %}
+  <ul>
+    {% for device in devices %}
+    <li><a href="{{ url_for('device_detail', name=device) }}">{{ device }}</a></li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p>No devices matched.</p>
+  {% endif %}
+</body>
+</html>

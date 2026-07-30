@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Runcible Web UI - {{ name }} run result</title>
+</head>
+<body>
+  <p><a href="{{ url_for('device_detail', name=name) }}">&laquo; {{ name }}</a></p>
+  <h1>Run result for {{ name }}</h1>
+
+  <h2>Completed</h2>
+  <ul>
+    {% for item in result.completed %}
+    <li>{{ item }}</li>
+    {% endfor %}
+  </ul>
+
+  {% if result.failed %}
+  <h2>Failed</h2>
+  <ul>
+    {% for item in result.failed %}
+    <li>{{ item }}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</body>
+</html>
