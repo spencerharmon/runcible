@@ -5,6 +5,7 @@ from runcible.drivers.omada import OmadaDriver
 from runcible.drivers.driver import DriverBase
 from runcible.protocols.rest_protocol import RestProtocol
 from runcible.core.plugin_registry import PluginRegistry
+from runcible.providers.omada.system import OmadaSystemProvider
 
 
 class TestOmadaDriver(unittest.TestCase):
@@ -20,9 +21,9 @@ class TestOmadaDriver(unittest.TestCase):
         self.assertIn("rest", OmadaDriver.protocol_map)
         self.assertIs(OmadaDriver.protocol_map["rest"], RestProtocol)
 
-    def test_module_provider_map_starts_empty(self):
+    def test_module_provider_map_wires_system_provider(self):
         # Filled in incrementally by the per-module Omada provider tasks.
-        self.assertEqual(OmadaDriver.module_provider_map, {})
+        self.assertIs(OmadaDriver.module_provider_map.get("system"), OmadaSystemProvider)
 
     def test_driver_registers_and_loads(self):
         PluginRegistry.drivers = {}

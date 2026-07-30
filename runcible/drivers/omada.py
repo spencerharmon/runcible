@@ -11,19 +11,22 @@ The lifecycle hooks below express that -- ``pre_plan_tasks`` /
 (plan) and write (exec) phases operate against the right site scope.
 
 This module is the driver skeleton. The per-module providers are wired into
-``module_provider_map`` by their respective tasks; it starts empty here, the
-same way the ``edgeos`` driver skeleton did.
+``module_provider_map`` by their respective tasks as they land; the
+``runcible/providers/omada/`` package holds the provider implementations.
 """
 from runcible.protocols.rest_protocol import RestProtocol
 from runcible.drivers.driver import DriverBase
+from runcible.providers.omada.system import OmadaSystemProvider
 
 
 class OmadaDriver(DriverBase):
     driver_name = "omada"
 
-    # Filled in by the per-module Omada provider tasks. Starts empty; the
-    # ``runcible/providers/omada/`` package holds the provider wiring.
-    module_provider_map = {}
+    # Filled in by the per-module Omada provider tasks.
+    # (omada-system-provider, omada-wlan-provider, ...).
+    module_provider_map = {
+        "system": OmadaSystemProvider,
+    }
 
     protocol_map = {
         "rest": RestProtocol
