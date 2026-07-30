@@ -16,14 +16,17 @@ same way the ``edgeos`` driver skeleton did.
 """
 from runcible.protocols.rest_protocol import RestProtocol
 from runcible.drivers.driver import DriverBase
+from runcible.providers.omada.wlan import OmadaWLANProvider
 
 
 class OmadaDriver(DriverBase):
     driver_name = "omada"
 
-    # Filled in by the per-module Omada provider tasks. Starts empty; the
-    # ``runcible/providers/omada/`` package holds the provider wiring.
-    module_provider_map = {}
+    # Per-module Omada provider wiring, keyed by module name (as it appears in
+    # the device's dstate). Providers live under ``runcible/providers/omada/``.
+    module_provider_map = {
+        "wlan": OmadaWLANProvider,
+    }
 
     protocol_map = {
         "rest": RestProtocol

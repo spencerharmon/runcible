@@ -20,9 +20,11 @@ class TestOmadaDriver(unittest.TestCase):
         self.assertIn("rest", OmadaDriver.protocol_map)
         self.assertIs(OmadaDriver.protocol_map["rest"], RestProtocol)
 
-    def test_module_provider_map_starts_empty(self):
-        # Filled in incrementally by the per-module Omada provider tasks.
-        self.assertEqual(OmadaDriver.module_provider_map, {})
+    def test_module_provider_map_wires_wlan(self):
+        # Filled in incrementally by the per-module Omada provider tasks; the
+        # wlan module is wired to the Omada WLAN/SSID provider.
+        from runcible.providers.omada.wlan import OmadaWLANProvider
+        self.assertIs(OmadaDriver.module_provider_map.get("wlan"), OmadaWLANProvider)
 
     def test_driver_registers_and_loads(self):
         PluginRegistry.drivers = {}
