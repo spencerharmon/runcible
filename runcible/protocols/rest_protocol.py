@@ -7,7 +7,7 @@ session it speaks the Omada controller's Northbound/controller API
 
 The controller is deployed into the k3s cluster (forklifted off the ``spray``
 host) and reached at its in-cluster Service / ingress endpoint
-(``omada.spencerharmon.com``), NOT ``localhost:8043``.
+(``omada.polyfam.studio``), NOT ``localhost:8043``.
 
 Auth handshake (Omada controller API v2):
 
