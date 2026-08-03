@@ -16,12 +16,12 @@ def _json_response(payload, status=200):
     resp = MagicMock()
     resp.json.return_value = payload
     resp.status_code = status
-    resp.url = "https://omada.polyfam.studio/api"
+    resp.url = "https://omada.example.com/api"
     return resp
 
 
 BASE_CONFIG = {
-    "hostname": "omada.polyfam.studio",
+    "hostname": "omada.example.com",
     "username": "admin",
     "password": "s3cr3t",
 }
@@ -47,12 +47,12 @@ class TestRestProtocolBasics(unittest.TestCase):
 
     def test_base_url_defaults_https_443(self):
         proto = RestProtocol(BASE_CONFIG)
-        self.assertEqual(proto.base_url, "https://omada.polyfam.studio:443")
+        self.assertEqual(proto.base_url, "https://omada.example.com:443")
 
     def test_base_url_honors_scheme_and_port(self):
         cfg = dict(BASE_CONFIG, scheme="http", port=8043)
         proto = RestProtocol(cfg)
-        self.assertEqual(proto.base_url, "http://omada.polyfam.studio:8043")
+        self.assertEqual(proto.base_url, "http://omada.example.com:8043")
 
 
 class TestRestProtocolAuthHandshake(unittest.TestCase):
@@ -70,14 +70,14 @@ class TestRestProtocolAuthHandshake(unittest.TestCase):
         # 1. GET /api/info to discover the controller id
         session.get.assert_called_once()
         info_url = session.get.call_args.args[0]
-        self.assertEqual(info_url, "https://omada.polyfam.studio:443/api/info")
+        self.assertEqual(info_url, "https://omada.example.com:443/api/info")
 
         # 2. POST /{omadacId}/api/v2/login with the admin credentials
         session.post.assert_called_once()
         login_url = session.post.call_args.args[0]
         self.assertEqual(
             login_url,
-            "https://omada.polyfam.studio:443/CID123/api/v2/login")
+            "https://omada.example.com:443/CID123/api/v2/login")
         self.assertEqual(
             session.post.call_args.kwargs["json"],
             {"username": "admin", "password": "s3cr3t"})
@@ -144,7 +144,7 @@ class TestRestProtocolSendImplement(unittest.TestCase):
         self.assertEqual(method, "POST")
         self.assertEqual(
             url,
-            "https://omada.polyfam.studio:443/CID123/api/v2/sites/S1/devices")
+            "https://omada.example.com:443/CID123/api/v2/sites/S1/devices")
         self.assertEqual(kwargs["params"], {"page": 1})
         self.assertEqual(kwargs["json"], {"name": "sw1"})
         self.assertEqual(kwargs["headers"]["Csrf-Token"], "TOKEN-abc")
