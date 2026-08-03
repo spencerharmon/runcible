@@ -50,9 +50,9 @@ class TestRestProtocolBasics(unittest.TestCase):
         self.assertEqual(proto.base_url, "https://omada.example.com:443")
 
     def test_base_url_honors_scheme_and_port(self):
-        cfg = dict(BASE_CONFIG, scheme="http", port=8043)
+        cfg = dict(BASE_CONFIG, scheme="http", port=8443)
         proto = RestProtocol(cfg)
-        self.assertEqual(proto.base_url, "http://omada.example.com:8043")
+        self.assertEqual(proto.base_url, "http://omada.example.com:8443")
 
 
 class TestRestProtocolAuthHandshake(unittest.TestCase):

@@ -5,9 +5,11 @@ protocols it subclasses :class:`TerminalProtocolBase`, but instead of a shell
 session it speaks the Omada controller's Northbound/controller API
 (https://omada-northbound-docs.tplinkcloud.com).
 
-The controller is deployed into the k3s cluster (forklifted off the ``spray``
-host) and reached at its in-cluster Service / ingress endpoint
-(``omada.example.com``), NOT ``localhost:8043``.
+The controller's endpoint (scheme/host/port) is NOT known to this engine code:
+it is supplied at runtime as per-device configuration (``hostname`` plus the
+optional ``scheme``/``port`` keys), exactly like the ssh/serial protocols. There
+is no hardcoded or default host -- a missing ``hostname`` is a validation error.
+Documentation examples use the RFC2606 placeholder ``omada.example.com``.
 
 Auth handshake (Omada controller API v2):
 
