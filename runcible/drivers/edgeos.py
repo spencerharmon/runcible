@@ -3,35 +3,44 @@
 EdgeOS is Vyatta-derived, so configuration state is read via
 ``show configuration commands`` and changes are applied by entering
 configure mode, issuing ``set``/``delete`` statements, then ``commit``
-and ``save`` over SSH.
+and ``save``.
 
-This module is the driver skeleton. The per-module providers
-(system, interfaces, static_route, bgp) are wired into
-``module_provider_map`` by their respective tasks; it starts empty here.
+Configure mode is per-session state, so both transports drive one persistent
+interactive ``vbash`` session (see :mod:`runcible.protocols.vyatta_shell`):
+
+* ``ssh``    -- interactive SSH shell (:class:`VyattaSSHProtocol`)
+* ``serial`` -- RS-232 console (:class:`VyattaSerialProtocol`), e.g. for
+  bootstrapping a factory-default router before it has a management address.
+
+A device document may carry both blocks; ``default_management_protocol``
+(overridable per run with ``runcible --protocol``) selects which one is used,
+and the module blocks are identical either way.
 """
-from runcible.protocols.ssh_protocol import SSHProtocol
+from runcible.protocols.vyatta_shell import VyattaSSHProtocol, VyattaSerialProtocol
 from runcible.drivers.driver import DriverBase
 from runcible.providers.edgeos.system import EdgeOSSystemProvider
 from runcible.providers.edgeos.interfaces import EdgeOSInterfacesProvider
 from runcible.providers.edgeos.static_v4_routes import EdgeOSStaticV4RoutesProvider
 from runcible.providers.edgeos.bgp import EdgeOSBGPProvider
+from runcible.providers.edgeos.users import EdgeOSUsersProvider
+from runcible.providers.edgeos.config import EdgeOSConfigProvider
 
 
 class EdgeOSDriver(DriverBase):
     driver_name = "edgeos"
 
-    # Filled in by the per-module provider tasks
-    # (edgeos-system-provider, edgeos-interfaces-provider,
-    #  edgeos-static-route-provider, edgeos-bgp-provider).
     module_provider_map = {
         "system": EdgeOSSystemProvider,
+        "users": EdgeOSUsersProvider,
         "interfaces": EdgeOSInterfacesProvider,
         "static_v4_routes": EdgeOSStaticV4RoutesProvider,
         "bgp": EdgeOSBGPProvider,
+        "vyatta_config": EdgeOSConfigProvider,
     }
 
     protocol_map = {
-        "ssh": SSHProtocol
+        "ssh": VyattaSSHProtocol,
+        "serial": VyattaSerialProtocol,
     }
 
     @staticmethod
@@ -44,7 +53,7 @@ class EdgeOSDriver(DriverBase):
         commands = device.send_command(
             "show configuration commands", memoize=True
         )
-        device.store('parsed_commands', commands.split("\n"))
+        device.store('parsed_commands', [line.strip() for line in commands.split("\n") if line.strip()])
 
     @staticmethod
     def pre_exec_tasks(device):
@@ -53,6 +62,7 @@ class EdgeOSDriver(DriverBase):
 
     @staticmethod
     def post_exec_tasks(device):
-        """Commit and persist the applied configuration."""
+        """Commit and persist the applied configuration, then leave configure mode."""
         device.send_command('commit')
         device.send_command('save')
+        device.send_command('exit')

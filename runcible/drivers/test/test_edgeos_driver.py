@@ -3,7 +3,7 @@ from unittest.mock import Mock
 
 from runcible.drivers.edgeos import EdgeOSDriver
 from runcible.drivers.driver import DriverBase
-from runcible.protocols.ssh_protocol import SSHProtocol
+from runcible.protocols.vyatta_shell import VyattaSSHProtocol, VyattaSerialProtocol
 from runcible.core.plugin_registry import PluginRegistry
 from runcible.providers.edgeos.system import EdgeOSSystemProvider
 from runcible.providers.edgeos.bgp import EdgeOSBGPProvider
@@ -19,8 +19,18 @@ class TestEdgeOSDriver(unittest.TestCase):
         self.assertEqual(EdgeOSDriver.driver_name, "edgeos")
 
     def test_protocol_map_binds_ssh(self):
+        # Configure mode is per-session state, so SSH must be an interactive shell.
         self.assertIn("ssh", EdgeOSDriver.protocol_map)
-        self.assertIs(EdgeOSDriver.protocol_map["ssh"], SSHProtocol)
+        self.assertIs(EdgeOSDriver.protocol_map["ssh"], VyattaSSHProtocol)
+
+    def test_protocol_map_binds_serial(self):
+        self.assertIs(EdgeOSDriver.protocol_map["serial"], VyattaSerialProtocol)
+
+    def test_module_provider_map_binds_users_and_vyatta_config(self):
+        from runcible.providers.edgeos.users import EdgeOSUsersProvider
+        from runcible.providers.edgeos.config import EdgeOSConfigProvider
+        self.assertIs(EdgeOSDriver.module_provider_map["users"], EdgeOSUsersProvider)
+        self.assertIs(EdgeOSDriver.module_provider_map["vyatta_config"], EdgeOSConfigProvider)
 
     def test_module_provider_map_registers_system_provider(self):
         # Filled in incrementally by the per-module provider tasks
@@ -57,8 +67,8 @@ class TestEdgeOSDriver(unittest.TestCase):
 
         device.reset_mock()
         EdgeOSDriver.post_exec_tasks(device)
-        device.send_command.assert_any_call('commit')
-        device.send_command.assert_any_call('save')
+        self.assertEqual([c.args[0] for c in device.send_command.call_args_list],
+                         ['commit', 'save', 'exit'])
 
         device.reset_mock()
         device.send_command.return_value = "set system host-name foo"

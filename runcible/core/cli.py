@@ -52,6 +52,11 @@ class Cli(object):
                             help="The value provided to the need string, if required")
         parser.add_argument('--version', action='store_true', help="Show version number and exit")
         parser.add_argument('--verbose', '-v', action='store_true', dest='verbose', help="Show debug output")
+        parser.add_argument('--protocol', '-p', type=str, default=None, dest='protocol',
+                            help="Management protocol to use (e.g. ssh, serial), overriding each device's "
+                                 "default_management_protocol")
+        parser.add_argument('--yes', action='store_true', dest='assume_yes',
+                            help="Apply without the interactive confirmation prompt")
         datasource_args = parser.add_argument_group("Datasources")
         datasource_args.add_argument(
                                 '-m',
@@ -99,12 +104,15 @@ class Cli(object):
                 raw = file.read()
             inp = yaml.safe_load(raw)
         if self.args.func == 'apply':
-                scheduler = NaiveScheduler(inp, self.args.target)
-                scheduler.apply()
+            scheduler = NaiveScheduler(inp, self.args.target, protocol=self.args.protocol)
+            scheduler.apply(assume_yes=self.args.assume_yes)
+        elif self.args.func == 'plan':
+            scheduler = NaiveScheduler(inp, self.args.target, protocol=self.args.protocol)
+            scheduler.apply(plan_only=True)
         elif self.args.func:
             value = self.args.value
             need = self.get_need_from_func(self.args.func, value=value)
-            scheduler = NaiveScheduler(inp, self.args.target)
+            scheduler = NaiveScheduler(inp, self.args.target, protocol=self.args.protocol)
             scheduler.run_adhoc_command(need)
 
     def get_need_from_func(self, funcstring, value=None):

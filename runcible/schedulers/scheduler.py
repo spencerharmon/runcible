@@ -26,7 +26,7 @@ class SchedulerBase(object):
         else:
             return PluginRegistry.get_scheduler(DEFAULT_SCHEDULER)(fabric_config, device_regex)
 
-    def __init__(self, fabric_config: dict, device_regex: str):
+    def __init__(self, fabric_config: dict, device_regex: str, protocol: str = None):
         self.meta_config = fabric_config.get('meta', {})
         PluginRegistry.load_schedulers()
         self.fabric = fabric_config
@@ -36,18 +36,27 @@ class SchedulerBase(object):
         except KeyError:
             pass
         self.regex = device_regex.strip('\'"')
+        self.protocol = protocol
         self.devices = []
         self.set_devices()
 
     def set_devices(self):
         for key, value in self.fabric.items():
             if re.match(self.regex, key):
-                self.devices.append(Device(key, value, callback_method=CBMethod.TERMINAL))
+                self.devices.append(Device(key, value, callback_method=CBMethod.TERMINAL, protocol=self.protocol))
         if not self.devices:
             TermCallback.error(msg="No devices matched.")
 
     def apply(self):
         raise RuncibleNotImplementedError
+
+    def disconnect_all(self):
+        """Close every device session (e.g. log a serial console back out)."""
+        for device in self.devices:
+            try:
+                device.disconnect()
+            except Exception as e:  # never mask the run's own outcome
+                TermCallback.error(msg=f"Error disconnecting {device.name}: {e}")
 
     def get_cstate(self):
         self.set_devices()

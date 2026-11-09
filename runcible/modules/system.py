@@ -6,6 +6,7 @@ from runcible.core.need import NeedOperation as Op
 class SystemResources(object):
     HOSTNAME = 'hostname'
     DNS = 'dns'
+    TIMEZONE = 'timezone'
 
 
 class System(Module):
@@ -25,5 +26,11 @@ class System(Module):
             'examples': [['8.8.8.8', '8.8.4.4'], ['1.1.1.1', '2.2.2.2', '3.3.3.3']],
             'description': "This attribute configures the system resolver, it is a list containing the IP address of "
                            "one or more DNS servers."
+        },
+        SystemResources.TIMEZONE: {
+            'type': str,
+            'allowed_operations': [Op.SET, Op.DELETE],
+            'examples': ['UTC', 'America/Chicago'],
+            'description': "The system time zone, as an IANA tz database name."
         }
     }

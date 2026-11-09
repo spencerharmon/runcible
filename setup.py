@@ -16,6 +16,8 @@ setuptools.setup(
         'cryptography>=42.0',
         'pyyaml>=6.0',
         'mergedb>=0.1.1',
+        # mergedb imports pkg_resources, which setuptools removed in v81.
+        'setuptools<81',
         'pyserial>=3.5',
         'VyattaConfParser>=0.5.1',
         'requests>=2.31',

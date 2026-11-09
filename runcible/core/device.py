@@ -152,7 +152,6 @@ class Device(object):
         self.clear_actions()
         if run_callbacks:
             return self.run_callbacks("execute")
-        self.disconnect()
 
     def ad_hoc_command(self, need):
         """
@@ -235,7 +234,7 @@ class Device(object):
         """
         Disconnect the protocol in use by the device
         """
-        self. protocol.disconnect()
+        self.protocol.disconnect()
 
     def send_command(self, command, memoize: bool = False):
         """
@@ -257,19 +256,17 @@ class Device(object):
             ClientExecutionError on a non 0 return code on the client
         """
         # If the user
-        if memoize:
-            for key, value in self._memoized_comands:
-                if key == command:
-                    return self._memoized_comands[command]
+        if memoize and command in self._memoized_comands:
+            return self._memoized_comands[command]
         try:
             result = self.protocol.run_command(command)
-            # Store the result if memoize is True
-            if memoize:
-                self._memoized_comands.update({'command': result})
-            return result
         except RuncibleNotConnectedError:
             self.protocol.connect()
-            return self.protocol.run_command(command)
+            result = self.protocol.run_command(command)
+        # Store the result if memoize is True
+        if memoize:
+            self._memoized_comands.update({command: result})
+        return result
 
     def load_dstate(self, dstate):
         """
