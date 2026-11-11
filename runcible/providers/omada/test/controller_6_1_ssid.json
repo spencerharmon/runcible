@@ -1,0 +1,51 @@
+{
+  "id": "000000000000000000000003",
+  "idInt": 1001,
+  "index": 1,
+  "name": "fixture-ssid",
+  "site": "000000000000000000000001",
+  "wlanId": "000000000000000000000002",
+  "band": 6,
+  "guestNetEnable": false,
+  "security": 3,
+  "broadcast": true,
+  "vlanEnable": false,
+  "portalEnable": false,
+  "accessEnable": false,
+  "rateLimit": {
+    "rateLimitId": "000000000000000000000004",
+    "downLimitEnable": false,
+    "upLimitEnable": false
+  },
+  "ssidRateLimit": {
+    "rateLimitId": "000000000000000000000004",
+    "downLimitEnable": false,
+    "upLimitEnable": false
+  },
+  "pskSetting": {
+    "versionPsk": 4,
+    "encryptionPsk": 3,
+    "gikRekeyPskEnable": false
+  },
+  "wlanScheduleEnable": false,
+  "macFilterEnable": false,
+  "rateAndBeaconCtrl": {
+    "rate2gCtrlEnable": false,
+    "rate5gCtrlEnable": false,
+    "manageRateControl2gEnable": false,
+    "manageRateControl5gEnable": false,
+    "rate6gCtrlEnable": false
+  },
+  "enable11r": false,
+  "pmfMode": 2,
+  "multiCastSetting": {
+    "multiCastEnable": true,
+    "channelUtil": 100,
+    "arpCastEnable": false,
+    "filterEnable": false
+  },
+  "mloEnable": false,
+  "deviceType": 3,
+  "resource": 0,
+  "vlanSetting": {"mode": 0, "customConfig": {}}
+}

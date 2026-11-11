@@ -21,11 +21,14 @@ under). Neither is defaulted -- a missing value is a validation error.
 Security mapping: the vendor-neutral ``auth_mode`` values map to Omada's
 controller security schema via :data:`AUTH_MODE_TO_OMADA`. A passphrase is never
 carried in the module in cleartext -- ``passphrase_ref`` is resolved to the real
-secret through the per-device ``wifi_passphrases`` map at emit time. The
-controller never returns a configured passphrase, so a passphrase-only change is
-not observable in current state and is intentionally excluded from the
-convergence diff (documented limitation).
+secret through a runtime ``${NAME}`` reference (directly or through the per-device
+``wifi_passphrases`` map). Passphrases are deliberately excluded from the diff;
+a passphrase-only change does not cause an update. Existing controller settings,
+including any returned security key, are preserved on PATCH.
 """
+from copy import deepcopy
+import re
+
 from runcible.providers.provider import ProviderBase
 from runcible.modules.wlan import (
     WLAN,
@@ -35,21 +38,15 @@ from runcible.modules.wlan import (
 )
 from runcible.core.need import Need, NeedOperation as Op
 from runcible.core.errors import RuncibleValidationError
+from runcible.protocols.config import resolve_env
 
 
 # Vendor-neutral auth_mode -> Omada controller security payload fragment.
 AUTH_MODE_TO_OMADA = {
-    'open': {'security': 'open'},
-    'wpa2_psk': {'security': 'wpa-personal', 'wpaMode': 'wpa2', 'encryption': 'aes'},
-    'wpa3_psk': {'security': 'wpa-personal', 'wpaMode': 'wpa3', 'encryption': 'aes'},
-    'wpa2_wpa3_psk': {'security': 'wpa-personal', 'wpaMode': 'wpa2wpa3', 'encryption': 'aes'},
-}
-
-# Reverse map (Omada wpaMode -> neutral auth_mode) for reading current state.
-_WPA_MODE_TO_AUTH_MODE = {
-    'wpa2': 'wpa2_psk',
-    'wpa3': 'wpa3_psk',
-    'wpa2wpa3': 'wpa2_wpa3_psk',
+    'open': {'security': 0},
+    'wpa2_psk': {'security': 3, 'pskSetting': {'versionPsk': 2, 'encryptionPsk': 3}},
+    'wpa3_psk': {'security': 3, 'pskSetting': {'versionPsk': 4, 'encryptionPsk': 3}},
+    'wpa2_wpa3_psk': {'security': 3, 'pskSetting': {'versionPsk': 4, 'encryptionPsk': 3}},
 }
 
 
@@ -65,6 +62,7 @@ class OmadaWLANProvider(ProviderBase):
         # Name -> Omada SSID id, populated by get_cstate; needed to address
         # update/delete operations at their per-SSID path.
         self._current_ids = None
+        self._current_ssids = {}
         super().__init__(device_instance, dstate)
 
     # -- path / config helpers ----------------------------------------------
@@ -91,45 +89,70 @@ class OmadaWLANProvider(ProviderBase):
     def _resolve_passphrase(self, ref):
         """Resolve a passphrase_ref to the real secret via per-device config.
 
-        The reference is looked up in the per-device ``wifi_passphrases`` map; an
-        unresolvable reference is a validation error rather than leaking the raw
-        reference as if it were the passphrase.
+        Named aliases remain supported, but their values must be runtime env
+        references, not literal secrets stored in device metadata.
         """
         secrets = self.device.meta_device.get('wifi_passphrases') or {}
-        if ref not in secrets:
+        reference = secrets.get(ref, ref)
+        if not isinstance(reference, str) or not re.fullmatch(
+                r'\$\{[A-Za-z_][A-Za-z0-9_]*\}', reference):
             raise RuncibleValidationError(
-                msg=f"Omada WLAN provider could not resolve passphrase_ref {ref!r}; "
-                    f"add it to the per-device 'wifi_passphrases' config.")
-        return secrets[ref]
+                msg="Omada passphrase_ref must resolve to a ${NAME} environment reference.")
+        value = resolve_env(reference, key='passphrase_ref')
+        if not value:
+            raise RuncibleValidationError(msg="Omada passphrase_ref resolved to an empty secret.")
+        return value
 
     # -- payload construction (neutral -> Omada) ----------------------------
 
-    def _security_payload(self, security):
-        auth_mode = security.get(SSIDSecurityResources.AUTH_MODE)
-        fragment = AUTH_MODE_TO_OMADA.get(auth_mode)
-        if fragment is None:
+    def _ssid_payload(self, ssid, current=None):
+        """Merge owned fields into the controller object, never a reduced PATCH."""
+        payload = deepcopy(current) if current is not None else {
+            'band': 3, 'deviceType': 3, 'guestNetEnable': False,
+            'pmfMode': 2, 'enable11r': False, 'mloEnable': False,
+        }
+        payload['name'] = ssid[SSIDResources.NAME]
+        enabled = ssid.get(SSIDResources.ENABLED, True)
+        if 'ssidEnable' in payload:
+            payload['ssidEnable'] = enabled
+        elif not enabled:
             raise RuncibleValidationError(
-                msg=f"Omada WLAN provider cannot map auth_mode {auth_mode!r}.")
-        payload = dict(fragment)
-        passphrase_ref = security.get(SSIDSecurityResources.PASSPHRASE_REF)
-        if passphrase_ref and fragment['security'] != 'open':
-            payload['pskString'] = self._resolve_passphrase(passphrase_ref)
-        return payload
-
-    def _ssid_payload(self, ssid):
-        """Build the Omada SSID request body from a neutral SSID dict."""
-        payload = {'name': ssid[SSIDResources.NAME]}
-        payload['enable'] = ssid.get(SSIDResources.ENABLED, True)
+                msg="This Omada SSID schema has no global enable setting; "
+                    "disabling requires per-AP overrides, not an 'enable' field.")
         payload['broadcast'] = ssid.get(SSIDResources.BROADCAST, True)
         vlan_id = ssid.get(SSIDResources.VLAN_ID)
-        if vlan_id is not None:
-            payload['vlanEnable'] = True
-            payload['vlanId'] = vlan_id
-        else:
-            payload['vlanEnable'] = False
-        security = ssid.get(SSIDResources.SECURITY)
-        if security:
-            payload.update(self._security_payload(security))
+        if current is None or vlan_id != self._vlan_id(current):
+            payload['vlanEnable'] = vlan_id is not None
+            payload['vlanSetting'] = {'mode': 0, 'customConfig': {}}
+            if vlan_id is not None:
+                if not 1 <= vlan_id <= 4094:
+                    raise RuncibleValidationError(msg="Omada VLAN ID must be between 1 and 4094.")
+                payload['vlanSetting'] = {
+                    'mode': 1, 'customConfig': {'customMode': 1, 'vlanId': vlan_id}}
+            payload.pop('vlanId', None)
+
+        security = ssid.get(SSIDResources.SECURITY) or {}
+        auth_mode = security.get(SSIDSecurityResources.AUTH_MODE, 'open')
+        # versionPsk=4 is mixed WPA2/WPA3 except on a 6-GHz-only SSID.
+        if (auth_mode == 'wpa3_psk' and payload['band'] != 4 or
+                auth_mode == 'wpa2_wpa3_psk' and payload['band'] == 4 or
+                auth_mode in ('open', 'wpa2_psk') and payload['band'] & 4):
+            raise RuncibleValidationError(
+                msg="Requested Omada security mode cannot be encoded on the existing bands.")
+        if current is None or auth_mode != self._omada_to_auth_mode(current):
+            fragment = deepcopy(AUTH_MODE_TO_OMADA[auth_mode])
+            payload['security'] = fragment['security']
+            if 'pskSetting' in fragment:
+                payload.setdefault('pskSetting', {}).update(fragment['pskSetting'])
+            else:
+                payload.pop('pskSetting', None)
+        ref = security.get(SSIDSecurityResources.PASSPHRASE_REF)
+        if auth_mode != 'open':
+            if ref:
+                payload['pskSetting']['securityKey'] = self._resolve_passphrase(ref)
+            elif current is None or current['security'] != 3:
+                raise RuncibleValidationError(
+                    msg="Creating a PSK SSID requires a passphrase_ref.")
         return payload
 
     # -- current-state parsing (Omada -> neutral) ---------------------------
@@ -137,17 +160,44 @@ class OmadaWLANProvider(ProviderBase):
     @staticmethod
     def _omada_to_auth_mode(omada_ssid):
         security = omada_ssid.get('security')
-        if security in (None, 'open', 'none', 0):
+        if security == 0:
             return 'open'
-        wpa_mode = omada_ssid.get('wpaMode')
-        return _WPA_MODE_TO_AUTH_MODE.get(wpa_mode, 'wpa2_psk')
+        if security == 3:
+            version = omada_ssid.get('pskSetting', {}).get('versionPsk')
+            if version == 2:
+                return 'wpa2_psk'
+            if version == 4:
+                return 'wpa3_psk' if omada_ssid.get('band') == 4 else 'wpa2_wpa3_psk'
+        raise RuncibleValidationError(msg="Omada SSID security mode is not representable by WLAN.")
+
+    @staticmethod
+    def _vlan_id(omada_ssid):
+        setting = omada_ssid.get('vlanSetting', {})
+        if setting.get('mode') == 0:
+            return None
+        custom = setting.get('customConfig', {})
+        vlan = None
+        if setting.get('mode') == 1:
+            if custom.get('customMode') == 1:
+                vlan = custom.get('vlanPoolIds') or custom.get('vlanId')
+            elif custom.get('customMode') == 0:
+                vlans = custom.get('lanNetworkVlanIds', {}).get(custom.get('lanNetworkId'), [])
+                if len(vlans) == 1:
+                    vlan = vlans[0]
+        if isinstance(vlan, str) and vlan.isdecimal():
+            vlan = int(vlan)
+        if type(vlan) is not int or not 1 <= vlan <= 4094:
+            raise RuncibleValidationError(
+                msg="Omada VLAN setting is not a single VLAN representable by WLAN.")
+        return vlan
 
     def _omada_to_neutral(self, omada_ssid):
         neutral = {SSIDResources.NAME: omada_ssid['name']}
-        neutral[SSIDResources.ENABLED] = bool(omada_ssid.get('enable', True))
+        neutral[SSIDResources.ENABLED] = bool(omada_ssid.get('ssidEnable', True))
         neutral[SSIDResources.BROADCAST] = bool(omada_ssid.get('broadcast', True))
-        if omada_ssid.get('vlanEnable') and omada_ssid.get('vlanId') is not None:
-            neutral[SSIDResources.VLAN_ID] = omada_ssid['vlanId']
+        vlan = self._vlan_id(omada_ssid)
+        if vlan is not None:
+            neutral[SSIDResources.VLAN_ID] = vlan
         neutral[SSIDResources.SECURITY] = {
             SSIDSecurityResources.AUTH_MODE: self._omada_to_auth_mode(omada_ssid),
         }
@@ -161,9 +211,11 @@ class OmadaWLANProvider(ProviderBase):
         else:
             data = result or []
         self._current_ids = {}
+        self._current_ssids = {}
         ssids = []
         for omada_ssid in data:
             self._current_ids[omada_ssid['name']] = omada_ssid.get('id')
+            self._current_ssids[omada_ssid['name']] = deepcopy(omada_ssid)
             ssids.append(self._omada_to_neutral(omada_ssid))
         return WLAN({WLANResources.SSIDS: ssids})
 
@@ -173,8 +225,8 @@ class OmadaWLANProvider(ProviderBase):
     def _normalize(ssid):
         """Comparable projection of a neutral SSID for convergence.
 
-        Excludes the passphrase (the controller never returns it, so it cannot
-        participate in the current-vs-desired diff).
+        Excludes the passphrase: a runtime reference is not comparable to the
+        controller's returned (potentially masked or omitted) securityKey.
         """
         security = ssid.get(SSIDResources.SECURITY) or {}
         return {
@@ -205,7 +257,7 @@ class OmadaWLANProvider(ProviderBase):
                 ops.append({
                     'method': 'PATCH',
                     'path': f"{base}/{self._current_ids.get(name)}",
-                    'data': self._ssid_payload(ssid),
+                    'data': self._ssid_payload(ssid, self._current_ssids[name]),
                 })
         for name in current:
             if name not in desired:

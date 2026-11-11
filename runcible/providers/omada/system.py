@@ -17,6 +17,7 @@ lifecycle hooks.
 from runcible.modules.system import System, SystemResources
 from runcible.providers.provider import ProviderBase
 from runcible.core.need import NeedOperation as Op
+from runcible.core.errors import RuncibleValidationError
 
 
 class OmadaSystemProvider(ProviderBase):
@@ -25,14 +26,51 @@ class OmadaSystemProvider(ProviderBase):
         'hostname',
     ]
 
-    def _site(self):
-        return self.device.retrieve('omada_site')
-
-    def _mac(self):
-        return self.device.meta_device.get('mac')
+    def __init__(self, device_instance, dstate):
+        self._resolved_identity = None
+        self._resolved_path = None
+        super().__init__(device_instance, dstate)
 
     def _device_path(self):
-        return f"/sites/{self._site()}/devices/{self._mac()}"
+        site = self.device.retrieve('omada_site')
+        mac = self.device.meta_device.get('mac')
+        if not isinstance(site, str) or not site.strip():
+            raise RuncibleValidationError(
+                msg="Omada system provider requires a selected site (omada_site).")
+        if not isinstance(mac, str) or not mac.strip():
+            raise RuncibleValidationError(
+                msg="Omada system provider requires the 'mac' meta config.")
+        mac = mac.upper().replace(':', '-')
+        identity = (site, mac)
+        if self._resolved_identity == identity:
+            return self._resolved_path
+
+        inventory = self.device.send_command({
+            'method': 'GET',
+            'path': f'/sites/{site}/devices',
+        })
+        if isinstance(inventory, dict):
+            inventory = inventory.get('data')
+        if not isinstance(inventory, list):
+            raise RuncibleValidationError(
+                msg="Omada device inventory must contain a list of devices.")
+        for device in inventory:
+            if not isinstance(device, dict):
+                continue
+            device_mac = device.get('mac')
+            if not isinstance(device_mac, str) or device_mac.upper().replace(':', '-') != mac:
+                continue
+            device_type = device.get('type')
+            collection = {'ap': 'eaps', 'switch': 'switches', 'gateway': 'gateways'}.get(
+                device_type if isinstance(device_type, str) else None)
+            if collection is None:
+                raise RuncibleValidationError(
+                    msg=f"Unsupported Omada device type {device_type!r} for MAC {mac}.")
+            self._resolved_path = f'/sites/{site}/{collection}/{device_mac}'
+            self._resolved_identity = identity
+            return self._resolved_path
+        raise RuncibleValidationError(
+            msg=f"Omada device MAC {mac} was not found in site {site!r}.")
 
     def get_cstate(self):
         result = self.device.send_command({
