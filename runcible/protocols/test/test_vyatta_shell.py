@@ -2,9 +2,13 @@ import os
 import unittest
 from unittest import mock
 
-from runcible.core.errors import RuncibleClientExecutionError, RuncibleConnectionError, RuncibleNotConnectedError
+from runcible.core.errors import (
+    RuncibleClientExecutionError, RuncibleConnectionError,
+    RuncibleNotConnectedError, RuncibleValidationError,
+)
+from runcible.protocols.config import resolve_env
 from runcible.protocols.shell_session import ShellSession
-from runcible.protocols.vyatta_shell import VyattaSerialProtocol, VyattaSSHProtocol, resolve_env
+from runcible.protocols.vyatta_shell import VyattaSerialProtocol, VyattaSSHProtocol
 from runcible.protocols.test.fake_vyatta import FakeVyatta
 
 
@@ -97,8 +101,7 @@ class TestVyattaSerialProtocol(unittest.TestCase):
         self.assertEqual(fake.state, 'shell')
 
     def test_unset_environment_variable_is_an_error(self):
-        os.environ.pop('TEST_RUNCIBLE_UNSET', None)
-        with self.assertRaises(RuncibleConnectionError):
+        with mock.patch.dict(os.environ, {}, clear=True), self.assertRaises(RuncibleValidationError):
             resolve_env('${TEST_RUNCIBLE_UNSET}', 'password')
 
     def test_already_logged_in_console_is_reused(self):

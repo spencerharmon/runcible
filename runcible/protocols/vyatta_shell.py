@@ -15,9 +15,8 @@ transport is selected:
 
 Secrets are never required to live in a device document: any string config
 value of the form ``${NAME}`` is resolved from the environment variable
-``NAME`` at connect time (an unset variable is a connection error).
+``NAME`` at connect time (an unset variable is a validation error).
 """
-import os
 import re
 
 from runcible.core.errors import (
@@ -26,10 +25,9 @@ from runcible.core.errors import (
     RuncibleNotConnectedError,
     RuncibleValidationError,
 )
+from runcible.protocols.config import resolve_env
 from runcible.protocols.protocol import TerminalProtocolBase
 from runcible.protocols.shell_session import ShellSession, CONFIG_PROMPT_RE, PROMPT_RE
-
-_ENV_RE = re.compile(r'\$\{([A-Za-z_][A-Za-z0-9_]*)\}')
 
 # Run once after reaching an op-mode prompt: no echo (so output is exactly the
 # command's), no line wrapping, and no pager on show commands.
@@ -54,19 +52,6 @@ _ERROR_MARKERS = (
     'not valid',
 )
 _CONFIGURE_VERBS = ('set', 'delete', 'commit', 'commit-confirm', 'save', 'configure')
-
-
-def resolve_env(value, key='value'):
-    if not isinstance(value, str):
-        return value
-
-    def repl(match):
-        name = match.group(1)
-        if name not in os.environ:
-            raise RuncibleConnectionError(
-                msg=f"Environment variable {name} (referenced by protocol key '{key}') is not set")
-        return os.environ[name]
-    return _ENV_RE.sub(repl, value)
 
 
 class VyattaShellProtocolBase(TerminalProtocolBase):

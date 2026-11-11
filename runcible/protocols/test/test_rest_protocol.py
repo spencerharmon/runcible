@@ -1,3 +1,4 @@
+import os
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -56,6 +57,51 @@ class TestRestProtocolBasics(unittest.TestCase):
 
 
 class TestRestProtocolAuthHandshake(unittest.TestCase):
+    @patch("runcible.protocols.rest_protocol.requests.Session")
+    def test_environment_credentials_resolve_at_connect(self, session_cls):
+        session = session_cls.return_value
+        session.get.return_value = _json_response(
+            {"errorCode": 0, "result": {"omadacId": "CID123"}})
+        session.post.return_value = _json_response(
+            {"errorCode": 0, "result": {"token": "TOKEN-abc"}})
+        config = dict(BASE_CONFIG, username='${TEST_REST_USER}',
+                      password='${TEST_REST_PASSWORD}',
+                      api_key='Bearer ${TEST_REST_PASSWORD}',
+                      verify_ssl=False, timeout=12)
+        original = dict(config)
+        with patch.dict(os.environ, {}, clear=True):
+            proto = RestProtocol(config)
+        for password in ('test-secret', 'rotated-secret'):
+            with patch.dict(os.environ, {'TEST_REST_USER': 'test-admin',
+                                        'TEST_REST_PASSWORD': password}):
+                with self.assertNoLogs('runcible', level='DEBUG'):
+                    proto.connect()
+            self.assertEqual(session.post.call_args.kwargs['json'],
+                             {'username': 'test-admin', 'password': password})
+            self.assertEqual(proto.api_key, 'Bearer ' + password)
+            self.assertIs(session.post.call_args.kwargs['verify'], False)
+            self.assertEqual(session.post.call_args.kwargs['timeout'], 12)
+            # Token refresh uses this connection's credentials, not references.
+            with patch.dict(os.environ, {}, clear=True):
+                proto.refresh_token()
+            self.assertEqual(session.post.call_args.kwargs['json'],
+                             {'username': 'test-admin', 'password': password})
+            self.assertEqual(config, original)
+
+    @patch("runcible.protocols.rest_protocol.requests.Session")
+    def test_unset_reference_fails_before_http(self, session_cls):
+        for key in ('username', 'password', 'api_key'):
+            with self.subTest(key=key), patch.dict(os.environ, {}, clear=True):
+                config = dict(BASE_CONFIG)
+                config[key] = 'private-prefix-${TEST_REST_MISSING}'
+                proto = RestProtocol(config)
+                with self.assertRaises(RuncibleValidationError) as error:
+                    proto.connect()
+                self.assertIn(key, str(error.exception))
+                self.assertNotIn('private-prefix', str(error.exception))
+                self.assertNotIn(config[key], str(error.exception))
+                session_cls.assert_not_called()
+
     @patch("runcible.protocols.rest_protocol.requests.Session")
     def test_connect_performs_login_handshake(self, session_cls):
         session = session_cls.return_value

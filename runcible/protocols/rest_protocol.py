@@ -23,12 +23,16 @@ The controller admin credentials come from the provisioned ``omada_user`` /
 ``omada_password`` secrets, delivered to this protocol through runcible's normal
 per-device config plumbing as the ``username`` / ``password`` config keys (the
 same mechanism the ssh/serial protocols use). They are NEVER hardcoded or given
-a default here -- a missing credential is a validation error.
+a default here -- a missing credential is a validation error. String config
+values may contain ``${NAME}`` environment references, resolved at connect time
+without changing the source document. Unset references are validation errors
+before any HTTP request.
 """
 import logging
 
 import requests
 
+from runcible.protocols.config import resolve_env
 from runcible.protocols.protocol import TerminalProtocolBase
 from runcible.core.errors import (
     RuncibleClientExecutionError,
@@ -59,6 +63,11 @@ class RestProtocol(TerminalProtocolBase):
         self.token = None
         self.omada_cid = None
         super().__init__(config=config)
+
+    def load_config(self, config):
+        # Retain references for reconnects, never write secrets into the document.
+        self._config = dict(config)
+        super().load_config(config)
 
     def validate(self, config):
         for key in ['hostname', 'username', 'password']:
@@ -92,6 +101,8 @@ class RestProtocol(TerminalProtocolBase):
 
     def connect(self):
         """Open the HTTP session and perform the Omada auth handshake."""
+        config = {key: resolve_env(value, key) for key, value in self._config.items()}
+        super().load_config(config)
         self.session = requests.Session()
         self.omada_cid = self._get_controller_id()
         self.token = self._login()
