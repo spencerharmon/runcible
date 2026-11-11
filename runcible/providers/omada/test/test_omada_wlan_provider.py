@@ -8,10 +8,14 @@ import pytest
 
 from runcible.core.errors import RuncibleValidationError
 from runcible.drivers.omada import OmadaDriver
-from runcible.providers.omada.wlan import OmadaWLANProvider, RESPONSE_ONLY_FIELDS
+from runcible.providers.omada.wlan import OmadaWLANProvider
 
 
 BASE = '/sites/site-abc/setting/wlans/wlangroup-1/ssids'
+RESPONSE_ONLY_FIELDS = {
+    'id', 'idInt', 'index', 'site', 'wlanId', 'resource',
+    'vlanEnable', 'portalEnable', 'accessEnable',
+}
 
 
 @pytest.fixture
@@ -86,12 +90,12 @@ def test_vlan_update_and_removal_round_trip(recorded):
     payload = provider.generate_operations()[0]['data']
     assert payload['vlanSetting'] == {
         'mode': 1, 'customConfig': {'customMode': 1, 'vlanId': 30}}
-    assert payload['vlanEnable'] is True
+    assert not RESPONSE_ONLY_FIELDS & payload.keys()
     assert 'vlanId' not in payload
     assert make_provider([payload], [desired(vlan_id=30)]).generate_operations() == []
     cleared = make_provider([payload], [desired()]).generate_operations()[0]['data']
     assert cleared['vlanSetting'] == {'mode': 0, 'customConfig': {}}
-    assert cleared['vlanEnable'] is False
+    assert not RESPONSE_ONLY_FIELDS & cleared.keys()
     assert make_provider([cleared], [desired()]).generate_operations() == []
 
 
@@ -206,23 +210,40 @@ def test_empty_controller_and_driver_wiring():
 
 
 WRITABLE_RECORDED_FIELDS = {
-    'name', 'band', 'guestNetEnable', 'security', 'broadcast', 'vlanEnable',
-    'portalEnable', 'accessEnable', 'rateLimit', 'ssidRateLimit', 'pskSetting',
+    'name', 'band', 'guestNetEnable', 'security', 'broadcast',
+    'rateLimit', 'ssidRateLimit', 'pskSetting',
     'wlanScheduleEnable', 'macFilterEnable', 'rateAndBeaconCtrl', 'enable11r',
     'pmfMode', 'multiCastSetting', 'mloEnable', 'deviceType', 'vlanSetting',
 }
 
 
-def test_patch_write_contract_strips_response_metadata(recorded):
+@pytest.mark.parametrize('current_vlan,changes', [
+    (None, {'broadcast': False}),
+    (None, {'vlan_id': 30}),
+    (20, {'vlan_id': 30}),
+    (20, {}),
+])
+def test_patch_write_contract_strips_response_metadata(recorded, current_vlan, changes):
     """Every recorded field is classified; PATCH carries exactly the writable ones."""
+    if current_vlan is not None:
+        recorded['vlanEnable'] = True
+        recorded['vlanSetting'] = {
+            'mode': 1, 'customConfig': {'customMode': 1, 'vlanId': current_vlan}}
+    recorded['pskSetting']['securityKey'] = 'synthetic-existing-test-key'
     assert set(recorded) == WRITABLE_RECORDED_FIELDS | RESPONSE_ONLY_FIELDS
-    ops = make_provider([recorded], [desired(broadcast=False)]).generate_operations()
+    original = deepcopy(recorded)
+    ops = make_provider([recorded], [desired(**changes)]).generate_operations()
+    assert len(ops) == 1
+    assert ops[0]['method'] == 'PATCH'
     data = ops[0]['data']
     assert set(data) == WRITABLE_RECORDED_FIELDS
     assert not set(data) & RESPONSE_ONLY_FIELDS
     assert ops[0]['path'] == f"{BASE}/{recorded['id']}"
-    for key in WRITABLE_RECORDED_FIELDS - {'broadcast'}:
+    changed_fields = {'broadcast'} if 'broadcast' in changes else {'vlanSetting'}
+    for key in WRITABLE_RECORDED_FIELDS - changed_fields:
         assert data[key] == recorded[key]
+    assert recorded == original
+    assert make_provider([data], [desired(**changes)]).generate_operations() == []
 
 
 def test_create_write_contract_has_no_response_metadata():

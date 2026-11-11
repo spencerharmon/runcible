@@ -50,10 +50,13 @@ AUTH_MODE_TO_OMADA = {
 }
 
 
-# Identity/metadata the controller returns on GET but which are not writable
+# Identity/metadata and derived flags returned on GET but not writable
 # settings. The local-v2 update contract rejects raw GET objects (-1001), so
 # these are stripped from every PATCH/POST body; the SSID id lives in the path.
-RESPONSE_ONLY_FIELDS = frozenset({'id', 'idInt', 'index', 'site', 'wlanId', 'resource'})
+RESPONSE_ONLY_FIELDS = frozenset({
+    'id', 'idInt', 'index', 'site', 'wlanId', 'resource',
+    'vlanEnable', 'portalEnable', 'accessEnable',
+})
 
 
 class OmadaWLANProvider(ProviderBase):
@@ -130,7 +133,6 @@ class OmadaWLANProvider(ProviderBase):
         payload['broadcast'] = ssid.get(SSIDResources.BROADCAST, True)
         vlan_id = ssid.get(SSIDResources.VLAN_ID)
         if current is None or vlan_id != self._vlan_id(current):
-            payload['vlanEnable'] = vlan_id is not None
             payload['vlanSetting'] = {'mode': 0, 'customConfig': {}}
             if vlan_id is not None:
                 if not 1 <= vlan_id <= 4094:

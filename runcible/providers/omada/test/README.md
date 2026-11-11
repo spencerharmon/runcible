@@ -18,12 +18,19 @@ Schema references used to interpret and construct variants:
 - [VLAN custom settings](https://github.com/Tohaker/omada-go-sdk/blob/6f0bafa8fdb133d7917572100297b6276e47f1db/omada/docs/SsidVlanCustomSettingOpenApiVO.md)
 - [SSID bands and security](https://github.com/Tohaker/omada-go-sdk/blob/6f0bafa8fdb133d7917572100297b6276e47f1db/omada/docs/CreateSsidOpenApiVO.md)
 - [Local-v2 WLAN implementation](https://github.com/emanuelbesliu/terraform-provider-tplink-omada/blob/6bc71b310bc81a90f3ad32194ba8c17947bf79d6/internal/resources/wireless_network.go)
+- [Local-v2 PATCH serializer](https://github.com/emanuelbesliu/terraform-provider-tplink-omada/blob/6bc71b310bc81a90f3ad32194ba8c17947bf79d6/internal/client/client.go#L822-L827)
 - [Local-v2 device rename routes](https://github.com/wncservices/terraform-provider-omada/blob/b0a018903f4136992b8bc6ebfa9d9871b238ac84/internal/omada/devices.go)
 
 The public schema describes Open API; it is supporting evidence, not proof of
 local-v2 write acceptance. No controller writes were performed for these tests.
 In particular, populated VLAN variants are schema-based regression cases, not
 recorded 6.1 write/read-back evidence.
+
+PATCH preserves writable settings, not the entire GET object. The pinned local-v2
+client excludes `vlanEnable`, `portalEnable`, and `accessEnable` as read-only,
+alongside response metadata. Tests independently classify these fields and check
+broadcast-only changes and VLAN addition/replacement/removal. VLAN writes use
+`vlanSetting` without reintroducing the derived `vlanEnable` flag.
 
 Provider boundaries: versionPsk 4 means mixed WPA2/WPA3 except on 6-GHz-only
 band 4, where it means WPA3. New SSIDs default to 2.4/5 GHz; updates preserve
