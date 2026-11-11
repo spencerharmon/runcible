@@ -50,6 +50,12 @@ AUTH_MODE_TO_OMADA = {
 }
 
 
+# Identity/metadata the controller returns on GET but which are not writable
+# settings. The local-v2 update contract rejects raw GET objects (-1001), so
+# these are stripped from every PATCH/POST body; the SSID id lives in the path.
+RESPONSE_ONLY_FIELDS = frozenset({'id', 'idInt', 'index', 'site', 'wlanId', 'resource'})
+
+
 class OmadaWLANProvider(ProviderBase):
     """Provider for the ``wlan`` module on Omada-managed sites."""
 
@@ -107,10 +113,12 @@ class OmadaWLANProvider(ProviderBase):
 
     def _ssid_payload(self, ssid, current=None):
         """Merge owned fields into the controller object, never a reduced PATCH."""
-        payload = deepcopy(current) if current is not None else {
+        payload = ({k: deepcopy(v) for k, v in current.items()
+                    if k not in RESPONSE_ONLY_FIELDS}
+                   if current is not None else {
             'band': 3, 'deviceType': 3, 'guestNetEnable': False,
             'pmfMode': 2, 'enable11r': False, 'mloEnable': False,
-        }
+        })
         payload['name'] = ssid[SSIDResources.NAME]
         enabled = ssid.get(SSIDResources.ENABLED, True)
         if 'ssidEnable' in payload:
@@ -181,15 +189,40 @@ class OmadaWLANProvider(ProviderBase):
             if custom.get('customMode') == 1:
                 vlan = custom.get('vlanPoolIds') or custom.get('vlanId')
             elif custom.get('customMode') == 0:
-                vlans = custom.get('lanNetworkVlanIds', {}).get(custom.get('lanNetworkId'), [])
-                if len(vlans) == 1:
-                    vlan = vlans[0]
+                vlan = OmadaWLANProvider._network_vlan(custom)
         if isinstance(vlan, str) and vlan.isdecimal():
             vlan = int(vlan)
         if type(vlan) is not int or not 1 <= vlan <= 4094:
             raise RuncibleValidationError(
                 msg="Omada VLAN setting is not a single VLAN representable by WLAN.")
         return vlan
+
+    @staticmethod
+    def _network_vlan(custom):
+        """Decode a by-network binding to its single VLAN, or None.
+
+        ``lanNetworkVlanIds`` (network -> VLAN list) supersedes the legacy
+        ``lanNetworkId``/``bridgeVlan`` pair and needs no ``lanNetworkId``. The
+        whole mapping is inspected: anything other than exactly one distinct
+        VLAN across all networks is a pool the neutral model cannot represent.
+        """
+        mapping = custom.get('lanNetworkVlanIds')
+        found = set()
+        if mapping:
+            if not isinstance(mapping, dict):
+                return None
+            for vlans in mapping.values():
+                if not isinstance(vlans, list):
+                    return None
+                found.update(vlans)
+            if len(mapping) != 1:
+                return None
+        legacy = custom.get('bridgeVlan')
+        if legacy is not None:
+            found.add(legacy)
+        if len(found) != 1:
+            return None
+        return next(iter(found))
 
     def _omada_to_neutral(self, omada_ssid):
         neutral = {SSIDResources.NAME: omada_ssid['name']}

@@ -8,7 +8,7 @@ import pytest
 
 from runcible.core.errors import RuncibleValidationError
 from runcible.drivers.omada import OmadaDriver
-from runcible.providers.omada.wlan import OmadaWLANProvider
+from runcible.providers.omada.wlan import OmadaWLANProvider, RESPONSE_ONLY_FIELDS
 
 
 BASE = '/sites/site-abc/setting/wlans/wlangroup-1/ssids'
@@ -58,7 +58,7 @@ def test_patch_preserves_all_unowned_fields_and_psk(recorded):
     original = deepcopy(recorded)
     provider = make_provider([recorded], [desired(broadcast=False)])
     ops = provider.generate_operations()
-    expected = deepcopy(recorded)
+    expected = {k: v for k, v in deepcopy(recorded).items() if k not in RESPONSE_ONLY_FIELDS}
     expected['broadcast'] = False
     assert ops == [{'method': 'PATCH', 'path': f"{BASE}/{recorded['id']}", 'data': expected}]
     assert recorded == original
@@ -203,3 +203,57 @@ def test_create_update_delete_order_and_fix_needs(recorded):
 def test_empty_controller_and_driver_wiring():
     assert make_provider([], []).generate_operations() == []
     assert OmadaDriver.module_provider_map['wlan'] is OmadaWLANProvider
+
+
+WRITABLE_RECORDED_FIELDS = {
+    'name', 'band', 'guestNetEnable', 'security', 'broadcast', 'vlanEnable',
+    'portalEnable', 'accessEnable', 'rateLimit', 'ssidRateLimit', 'pskSetting',
+    'wlanScheduleEnable', 'macFilterEnable', 'rateAndBeaconCtrl', 'enable11r',
+    'pmfMode', 'multiCastSetting', 'mloEnable', 'deviceType', 'vlanSetting',
+}
+
+
+def test_patch_write_contract_strips_response_metadata(recorded):
+    """Every recorded field is classified; PATCH carries exactly the writable ones."""
+    assert set(recorded) == WRITABLE_RECORDED_FIELDS | RESPONSE_ONLY_FIELDS
+    ops = make_provider([recorded], [desired(broadcast=False)]).generate_operations()
+    data = ops[0]['data']
+    assert set(data) == WRITABLE_RECORDED_FIELDS
+    assert not set(data) & RESPONSE_ONLY_FIELDS
+    assert ops[0]['path'] == f"{BASE}/{recorded['id']}"
+    for key in WRITABLE_RECORDED_FIELDS - {'broadcast'}:
+        assert data[key] == recorded[key]
+
+
+def test_create_write_contract_has_no_response_metadata():
+    data = make_provider([], [desired(security={'auth_mode': 'open'})]).generate_operations()[0]['data']
+    assert not set(data) & RESPONSE_ONLY_FIELDS
+
+
+@pytest.mark.parametrize('custom', [
+    {'customMode': 0, 'lanNetworkVlanIds': {'lan-1': [20]}},
+    {'customMode': 0, 'lanNetworkId': 'lan-1', 'bridgeVlan': 20},
+    {'customMode': 0, 'lanNetworkId': 'lan-1', 'lanNetworkVlanIds': {'lan-1': [20]}},
+])
+def test_by_network_single_vlan_is_no_op(recorded, custom):
+    recorded['vlanEnable'] = True
+    recorded['vlanSetting'] = {'mode': 1, 'customConfig': custom}
+    assert make_provider([recorded], [desired(vlan_id=20)]).generate_operations() == []
+    data = make_provider([recorded], [desired(vlan_id=20, broadcast=False)]).generate_operations()[0]['data']
+    assert data['vlanSetting'] == recorded['vlanSetting']
+
+
+@pytest.mark.parametrize('custom', [
+    {'customMode': 0, 'lanNetworkId': 'lan-1',
+     'lanNetworkVlanIds': {'lan-1': [20], 'lan-2': [30]}},
+    {'customMode': 0, 'lanNetworkVlanIds': {'lan-1': [20, 30]}},
+    {'customMode': 0, 'lanNetworkVlanIds': {'lan-1': [20], 'lan-2': [20]}},
+    {'customMode': 0, 'lanNetworkVlanIds': {'lan-1': [20]}, 'bridgeVlan': 30},
+    {'customMode': 0, 'lanNetworkId': 'lan-1'},
+])
+@pytest.mark.parametrize('want', [20, 30, None])
+def test_by_network_pool_fails_closed(recorded, custom, want):
+    recorded['vlanEnable'] = True
+    recorded['vlanSetting'] = {'mode': 1, 'customConfig': custom}
+    with pytest.raises(RuncibleValidationError):
+        make_provider([recorded], [desired(vlan_id=want)]).generate_operations()
