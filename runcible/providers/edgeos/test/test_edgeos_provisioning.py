@@ -97,6 +97,17 @@ class TestVyattaConfigModule(unittest.TestCase):
                                                f'set {base} static-mapping h2 ip-address 192.0.2.11']})
         self.assertEqual([n.value for n in desired.determine_needs(current)], [f'{base} static-mapping h1'])
 
+    def test_emptied_managed_path_is_deleted_whole(self):
+        # Regression (real EdgeOS): deleting every leaf of `service dns forwarding`
+        # left the service node with no listen-on and the commit was refused.
+        desired = VyattaConfig({'statements': ['service ssh port 22'],
+                                'managed_paths': ['service dns forwarding', 'service ssh']})
+        current = VyattaConfig({'statements': ['set service dns forwarding cache-size 0',
+                                               'set service dns forwarding listen-on eth1',
+                                               'set service dns forwarding name-server 192.0.2.53',
+                                               'set service ssh port 22']})
+        self.assertEqual([n.value for n in desired.determine_needs(current)], ['service dns forwarding'])
+
     def test_partial_subtree_removal_stays_leaf_level(self):
         base = 'service nat rule 10'
         desired = VyattaConfig({'statements': [f'{base} type masquerade'], 'managed_paths': ['service nat']})

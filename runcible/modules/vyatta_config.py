@@ -120,7 +120,17 @@ def _collapse(doomed, current, desired, managed):
     doomed_set = set(doomed)
     result = []
     for stmt in doomed:
-        floor = max((len(p) for p in managed if _is_prefix(p, stmt)), default=0)
+        path = max((p for p in managed if _is_prefix(p, stmt)), key=len, default=())
+        # Nothing desired under the managed path at all: remove the path node
+        # itself (e.g. a whole service), not its leaves one by one — Vyatta can
+        # refuse to commit a service left with no mandatory children.
+        if path and not any(_is_prefix(path, want) for want in desired) and \
+                all(c in doomed_set for c in current if _is_prefix(path, c)):
+            if path not in result and not any(_is_prefix(r, path) for r in result):
+                result = [r for r in result if not _is_prefix(path, r)]
+                result.append(path)
+            continue
+        floor = len(path)
         chosen = stmt
         for length in range(floor + 1, len(stmt)):
             node = stmt[:length]
